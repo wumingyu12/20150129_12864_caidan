@@ -1,0 +1,202 @@
+C51 COMPILER V9.51   LCD12864                                                              02/06/2015 11:32:00 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE LCD12864
+OBJECT MODULE PLACED IN .\obj\LCD12864.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE src\LCD12864.c BROWSE DEBUG OBJECTEXTEND PRINT(.\list\LCD12864.lst) TABS(2)
+                    - OBJECT(.\obj\LCD12864.obj)
+
+line level    source
+
+   1          #include " LCD12864.h "
+   2          
+   3          unsigned char code AC_TABLE[32]={
+   4          0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,      //第一行汉字位置
+   5          0x90,0x91,0x92,0x93,0x94,0x95,0x96,0x97,      //第二行汉字位置
+   6          0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f,      //第三行汉字位置
+   7          0x98,0x99,0x9a,0x9b,0x9c,0x9d,0x9e,0x9f,      //第四行汉字位置
+   8          };
+   9          
+  10          void SendByte(unsigned char Dbyte)
+  11          {
+  12   1           unsigned char i;
+  13   1           for(i=0;i<8;i++)
+  14   1           {
+  15   2                 SCK = 0;
+  16   2                 Dbyte=Dbyte<<1;      //左移一位
+  17   2                 SID = CY;            //移出的位给SID
+  18   2                 SCK = 1;
+  19   2                 SCK = 0;
+  20   2           }
+  21   1      }
+  22          
+  23          unsigned char ReceiveByte(void)
+  24          {
+  25   1            unsigned char i,temp1,temp2;
+  26   1           temp1 = 0;
+  27   1           temp2 = 0;
+  28   1           for(i=0;i<8;i++)
+  29   1           {
+  30   2                 temp1=temp1<<1;
+  31   2                 SCK = 0;
+  32   2                 SCK = 1;            
+  33   2                 SCK = 0;
+  34   2                 if(SID) temp1++;
+  35   2           }
+  36   1           for(i=0;i<8;i++)
+  37   1           {
+  38   2                 temp2=temp2<<1;
+  39   2                 SCK = 0;
+  40   2                 SCK = 1;
+  41   2                 SCK = 0;
+  42   2                 if(SID) temp2++;
+  43   2           }
+  44   1           return ((0xf0&temp1)+(0x0f&temp2));
+  45   1      }
+  46          
+  47          void CheckBusy(void)//查询液晶是否忙
+  48          {
+  49   1           do   SendByte(0xfc);            //11111,RW(1),RS(0),0
+  50   1           while(0x80&ReceiveByte());      //BF(.7)=1 Busy
+  51   1      }
+  52          
+  53          
+  54          void WriteCommand(unsigned char Cbyte )//写命令
+C51 COMPILER V9.51   LCD12864                                                              02/06/2015 11:32:00 PAGE 2   
+
+  55          {
+  56   1           CS = 1;
+  57   1           CheckBusy();
+  58   1           SendByte(0xf8);            //11111,RW(0),RS(0),0
+  59   1           SendByte(0xf0&Cbyte);      //高四位
+  60   1           SendByte(0xf0&Cbyte<<4);//低四位(先执行<<)
+  61   1           CS = 0;
+  62   1      }
+  63          
+  64          void WriteData(unsigned char Dbyte )
+  65          {
+  66   1           CS = 1;
+  67   1           CheckBusy();
+  68   1           SendByte(0xfa);            //11111,RW(0),RS(1),0
+  69   1           SendByte(0xf0&Dbyte);      //高四位
+  70   1           SendByte(0xf0&Dbyte<<4);//低四位(先执行<<)
+  71   1           CS = 0;
+  72   1      }
+  73          
+  74          void LcmInit( void )
+  75          {
+  76   1           WriteCommand(0x30);      //8BitMCU,基本指令集合
+  77   1           //WriteCommand(0x03);      //AC归0,不改变DDRAM内容
+  78   1           WriteCommand(0x0C);      //显示ON,游标OFF,游标位反白OFF
+  79   1           WriteCommand(0x01);      //清屏,AC归0
+  80   1           WriteCommand(0x06);      //写入时,游标右移动
+  81   1      }
+  82          
+  83          void LcmClearTXT( void )
+  84          {
+  85   1            unsigned char i;
+  86   1           WriteCommand(0x30);      //8BitMCU,基本指令集合
+  87   1           WriteCommand(0x80);      //AC归起始位
+  88   1           for(i=0;i<64;i++)
+  89   1           WriteData(0x20);
+  90   1      }
+  91          
+  92          void LcmClearBMP( void )
+  93          {
+  94   1             unsigned char i,j;
+  95   1           WriteCommand(0x34);      //8Bit扩充指令集,即使是36H也要写两次
+  96   1           WriteCommand(0x36);      //绘图ON,基本指令集里面36H不能开绘图
+  97   1           for(i=0;i<32;i++)        
+  98   1           {
+  99   2                 WriteCommand(0x80|i);      //行位置
+ 100   2                 WriteCommand(0x80);      //列位置
+ 101   2                 for(j=0;j<32;j++)            //256/8=32 byte
+ 102   2                      WriteData(0);
+ 103   2           }
+ 104   1      }
+ 105          
+ 106          void dprintf(unsigned char row,unsigned char col,unsigned char *puts)
+ 107          {
+ 108   1           WriteCommand(0x32);//0011-00(普通指令模式)1（图像依然开，要不会一开一关导致在闪）0
+ 109   1           WriteCommand(AC_TABLE[8*row+col]);      //起始位置
+ 110   1           while(*puts != 0)      //判断字符串是否显示完毕
+ 111   1           {
+ 112   2                 if(col==8)            //判断换行
+ 113   2                 {            //若不判断,则自动从第一行到第三行
+ 114   3                       col=0;
+ 115   3                       row++;
+ 116   3                 }
+C51 COMPILER V9.51   LCD12864                                                              02/06/2015 11:32:00 PAGE 3   
+
+ 117   2                 if(row==4) {row=0;}    //一屏显示完,回到屏左上角
+ 118   2                 WriteCommand(AC_TABLE[8*row+col]);
+ 119   2                 WriteData(*puts);      //一个汉字要写两次
+ 120   2                 puts++;
+ 121   2                 WriteData(*puts);
+ 122   2                 puts++;
+ 123   2                 col++;
+ 124   2           }
+ 125   1      }
+ 126          
+ 127          //这个函数是全屏写一次的实测响应太慢了。用下面的函数，只对特定行写
+ 128          void fangbai_hang_12864(unsigned char hang){
+ 129   1        unsigned char i,y,ygroup,x,color_0,color_1,color_2,color_3,color_tmp;
+ 130   1        WriteCommand(0x36);//0011-01（扩充指令）1（开图像）0
+ 131   1        switch(hang){
+ 132   2          case 0:{color_0=0xff;color_1=0x00;color_2=0x00;color_3=0x00;break;}//根据行数给每一行赋值颜色
+ 133   2          case 1:{color_0=0x00;color_1=0xff;color_2=0x00;color_3=0x00;break;}
+ 134   2          case 2:{color_0=0x00;color_1=0x00;color_2=0xff;color_3=0x00;break;}
+ 135   2          case 3:{color_0=0x00;color_1=0x00;color_2=0x00;color_3=0xff;break;}
+ 136   2        }
+ 137   1        for(ygroup=0;ygroup<64;ygroup++){//行循环
+ 138   2          if(ygroup<16){x=0x80;y=ygroup+0x80;color_tmp=color_0;}//如果循环到第一行
+ 139   2          if(16<=ygroup&&ygroup<32){x=0x80;y=ygroup+0x80;color_tmp=color_1;}
+ 140   2          if(32<=ygroup&&ygroup<48){x=0x88;y=ygroup-32+0x80;color_tmp=color_2;}//下半屏幕
+ 141   2          if(48<=ygroup&&ygroup<64){x=0x88;y=ygroup-32+0x80;color_tmp=color_3;}
+ 142   2          //if(ygroup<32){x=0x80;y=ygroup+0x80;}
+ 143   2          //else{x=0x88;y=ygroup-32+0x80;}
+ 144   2          WriteCommand(y);//顺序别反了先y
+ 145   2          WriteCommand(x);
+ 146   2          for(i=0;i<16;i++){//连续写入一行的数据，x坐标会自动增加
+ 147   3            WriteData(color_tmp);
+ 148   3          }
+ 149   2        }
+ 150   1        WriteCommand(0x32);//0011-00(普通指令模式)1（图像依然开，要不会一开一关导致在闪）0
+ 151   1      }
+ 152          
+ 153          void Writecolor_hang_12864(unsigned char hang,unsigned char color){
+ 154   1        unsigned char i,x,y,color_tmp,ygroup;//一定要放第一排
+ 155   1        WriteCommand(0x36);//0011-01（扩充指令）1（开图像）0
+ 156   1        if(color==1){color_tmp=0xff;}//填充黑色
+ 157   1          else{color_tmp=0x00;}
+ 158   1        switch(hang){
+ 159   2          case 0:{x=0x80;y=0x80;break;}//
+ 160   2          case 1:{x=0x80,y=0x90;break;}
+ 161   2          case 2:{x=0x88;y=0x80;break;}
+ 162   2          case 3:{x=0x88;y=0x90;break;}
+ 163   2        }
+ 164   1        for(ygroup=0;ygroup<16;ygroup++){//16行循环
+ 165   2            WriteCommand(y+ygroup);//顺序别反了先y
+ 166   2            WriteCommand(x);
+ 167   2            for(i=0;i<16;i++){//连续写入一行的数据，x坐标会自动增加
+ 168   3              WriteData(color_tmp);
+ 169   3            }
+ 170   2        }
+ 171   1        WriteCommand(0x32);//0011-00(普通指令模式)1（图像依然开，要不会一开一关导致在闪）0
+ 172   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    584    ----
+   CONSTANT SIZE    =     32    ----
+   XDATA SIZE       =   ----    ----
+C51 COMPILER V9.51   LCD12864                                                              02/06/2015 11:32:00 PAGE 4   
+
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      10
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

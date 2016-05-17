@@ -1,0 +1,5 @@
+".\obj\main.obj",
+".\obj\LCD12864.obj",
+".\obj\Finger_Modle.obj" 
+TO ".\obj\zw" 
+PRINT(".\list\zw.m51") RAMSIZE(256) 
